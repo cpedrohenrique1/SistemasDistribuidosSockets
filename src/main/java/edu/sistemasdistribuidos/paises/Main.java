@@ -6,6 +6,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.List;
+import java.util.Random;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
@@ -22,7 +23,9 @@ public class Main {
             Gson gson = new Gson();
             Type paisListType = new TypeToken<List<Pais>>(){}.getType();
             List<Pais> paises = gson.fromJson(response.body(), paisListType);
-            paises.forEach(pais -> System.out.println(pais.getName().getCommon()));
+            Random random = new Random();
+            int randomIndex = random.nextInt(paises.size());
+            System.out.println(paises.get(randomIndex).getName().getCommon());
         }
     }
 }
