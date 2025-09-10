@@ -1,0 +1,11 @@
+services:
+  paises:
+    image: maven:3.9.11-amazoncorretto-21-alpine
+    volumes:
+      - .:/app      # Mapeia o diretório atual para o diretório /app no container
+    working_dir: /app  # Define o diretório de trabalho no container
+    ports:
+      - "5000:5000"     # Expondo a porta 5000
+    command: sh         # Executa o comando 'sh' dentro do container
+    stdin_open: true    # Habilita o terminal interativo
+    tty: true           # Mantém o terminal aberto
