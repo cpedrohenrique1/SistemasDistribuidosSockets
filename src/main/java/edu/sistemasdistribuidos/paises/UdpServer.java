@@ -1,6 +1,11 @@
 package edu.sistemasdistribuidos.paises;
 
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
+import edu.sistemasdistribuidos.paises.models.Pais;
+
 import java.io.IOException;
+import java.lang.reflect.Type;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
@@ -14,7 +19,6 @@ import java.net.http.HttpResponse.BodyHandlers;
 import java.nio.charset.StandardCharsets;
 import java.text.NumberFormat;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -23,8 +27,7 @@ import java.util.Objects;
 import java.util.Scanner;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 public class UdpServer {
 
@@ -33,11 +36,12 @@ public class UdpServer {
     private final Map<String, SocketAddress> clients = new ConcurrentHashMap<>();
 
     private DatagramSocket socket;
-    private Country targetCountry;
+    private Pais targetCountry;
 
     private final HttpClient http = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
             .build();
+    private final Gson gson = new Gson();
 
     public static void main(String[] args) throws Exception {
         new UdpServer().start();
@@ -47,7 +51,7 @@ public class UdpServer {
         chooseTargetCountry();
 
         socket = new DatagramSocket(SERVER_PORT);
-        System.out.println("[SERVER] Listening on port " + SERVER_PORT + ". Game started with: " + targetCountry.name);
+        System.out.println("[SERVER] Listening on port " + SERVER_PORT + ". Game started with: " + targetCountry.getName().getCommon());
         byte[] buf = new byte[BUFFER_SIZE];
         DatagramPacket packet = new DatagramPacket(buf, buf.length);
 
@@ -70,10 +74,10 @@ public class UdpServer {
             System.out.print("Digite o país que deseja iniciar o jogo (ex: Brazil): ");
             String input = sc.nextLine().trim();
             if (input.isEmpty()) continue;
-            Country c = fetchCountryByName(input, true);
+            Pais c = fetchCountryByName(input, true);
             if (c != null) {
                 targetCountry = c;
-                System.out.println("[SERVER] Country set: " + c.name);
+                System.out.println("[SERVER] Country set: " + c.getName().getCommon());
                 break;
             } else {
                 System.out.println("[SERVER] Country not found. Tente novamente.");
@@ -99,50 +103,52 @@ public class UdpServer {
     private void processGuess(String guess, String clientKey) {
         broadcast("[SERVER] Player " + clientKey + " guessed: " + guess);
 
-        Country guessed = fetchCountryByName(guess, false);
+        Pais guessed = fetchCountryByName(guess, false);
         if (guessed == null) {
             broadcast("[SERVER] País não encontrado: " + guess);
             return;
         }
 
-        boolean nameOk = normalize(guessed.name).equalsIgnoreCase(normalize(targetCountry.name));
+        boolean nameOk = normalize(guessed.getName().getCommon()).equalsIgnoreCase(normalize(targetCountry.getName().getCommon()));
         if (nameOk) {
-            broadcast("[SERVER] 🎉 CONGRATULATIONS! Player " + clientKey + " acertou: " + guessed.name);
+            broadcast("[SERVER] 🎉 CONGRATULATIONS! Player " + clientKey + " acertou: " + guessed.getName().getCommon());
             broadcast("[SERVER] Country info:\n" + formatCountryFull(guessed));
             return;
         }
 
         StringBuilder report = new StringBuilder();
         report.append("Relatório comparativo (chute por ").append(clientKey).append("):\n");
+        report.append("País: ").append(guessed.getName().getCommon()).append(" - incorreto\n");
+        report.append("Continente: ").append(guessed.getRegion())
+              .append(guessed.getRegion().equalsIgnoreCase(targetCountry.getRegion()) ? " - correto" : " - incorreto").append("\n");
 
-        // País
-        report.append("País: ").append(guessed.name).append(" - incorreto\n");
+        String guessedCapital = getCapital(guessed);
+        String targetCapital = getCapital(targetCountry);
+        report.append("Capital: ").append(guessedCapital)
+              .append(Objects.equals(guessedCapital, targetCapital) ? " - correto" : " - incorreto").append("\n");
 
-        // Continente
-        report.append("Continente: ").append(guessed.region)
-              .append(guessed.region.equalsIgnoreCase(targetCountry.region) ? " - correto" : " - incorreto").append("\n");
+        report.append("Área (km²): ").append(formatNumberRelation(guessed.getArea(), targetCountry.getArea())).append("\n");
+        report.append("População: ").append(formatNumberRelation(guessed.getPopulation(), targetCountry.getPopulation())).append("\n");
 
-        // Capital
-        String cap = guessed.capital == null ? "—" : guessed.capital;
-        report.append("Capital: ").append(cap)
-              .append(Objects.equals(cap, targetCountry.capital) ? " - correto" : " - incorreto").append("\n");
-
-        // Área
-        report.append("Área (km²): ").append(formatNumberRelation(guessed.area, targetCountry.area)).append("\n");
-
-        // População
-        report.append("População: ").append(formatNumberRelation(guessed.population, targetCountry.population)).append("\n");
-
-        // Línguas
-        String langs = guessed.languages == null ? "—" : guessed.languages;
-        boolean langsOk = hasCommonLanguage(langs, targetCountry.languages);
-        report.append("Línguas: ").append(langs).append(langsOk ? " - correto" : " - incorreto").append("\n");
+        String guessedLangs = getLanguages(guessed);
+        String targetLangs = getLanguages(targetCountry);
+        boolean langsOk = hasCommonLanguage(guessedLangs, targetLangs);
+        report.append("Línguas: ").append(guessedLangs).append(langsOk ? " - pelo menos uma correta" : " - incorreto").append("\n");
 
         broadcast(report.toString());
     }
+    
+    private String getCapital(Pais pais) {
+        if (pais.getCapital() == null || pais.getCapital().length == 0) return "—";
+        return pais.getCapital()[0];
+    }
+    
+    private String getLanguages(Pais pais) {
+        if (pais.getLanguages() == null || pais.getLanguages().isEmpty()) return "—";
+        return String.join(", ", pais.getLanguages().values());
+    }
 
     private String formatNumberRelation(double guess, double target) {
-        if (Double.isNaN(guess) || Double.isNaN(target)) return "—";
         NumberFormat nf = NumberFormat.getInstance(new Locale("pt", "BR"));
         nf.setMaximumFractionDigits(0);
         String guessStr = nf.format((long) guess);
@@ -151,11 +157,11 @@ public class UdpServer {
     }
 
     private boolean hasCommonLanguage(String a, String b) {
-        if (a == null || b == null) return false;
-        Set<String> A = splitToSet(a);
-        Set<String> B = splitToSet(b);
-        for (String x : A) if (B.contains(x)) return true;
-        return false;
+        if (a == null || b == null || a.equals("—") || b.equals("—")) return false;
+        Set<String> setA = splitToSet(a);
+        Set<String> setB = splitToSet(b);
+        setA.retainAll(setB); // Intersecção
+        return !setA.isEmpty();
     }
 
     private Set<String> splitToSet(String s) {
@@ -179,71 +185,23 @@ public class UdpServer {
         for (SocketAddress addr : clients.values()) sendTo(addr, msg);
     }
 
-    // --- HTTP + parsing ---
-    private Country fetchCountryByName(String name, boolean fullText) {
+    private Pais fetchCountryByName(String name, boolean fullText) {
         try {
             String q = URLEncoder.encode(name, StandardCharsets.UTF_8);
-            String url = "https://restcountries.com/v3.1/name/" + q + (fullText ? "?fullText=true" : "");
+            String url = "https://restcountries.com/v3.1/name/" + q + "?fields=name,region,capital,area,population,languages" + (fullText ? "&fullText=true" : "");
             HttpRequest req = HttpRequest.newBuilder().uri(URI.create(url)).timeout(Duration.ofSeconds(10)).GET().build();
             HttpResponse<String> resp = http.send(req, BodyHandlers.ofString());
+
             if (resp.statusCode() != 200) return null;
-            String body = resp.body();
-            String firstObj = extractFirstJsonObject(body);
-            return firstObj == null ? null : parseCountry(firstObj);
+
+            Type paisListType = new TypeToken<List<Pais>>(){}.getType();
+            List<Pais> paises = gson.fromJson(resp.body(), paisListType);
+
+            return paises.isEmpty() ? null : paises.get(0);
         } catch (Exception e) {
+            System.err.println("[SERVER] Error fetching country data: " + e.getMessage());
             return null;
         }
-    }
-
-    private String extractFirstJsonObject(String json) {
-        int start = json.indexOf('{');
-        if (start < 0) return null;
-        int depth = 0;
-        for (int i = start; i < json.length(); i++) {
-            char c = json.charAt(i);
-            if (c == '{') depth++;
-            else if (c == '}') {
-                depth--;
-                if (depth == 0) return json.substring(start, i + 1);
-            }
-        }
-        return null;
-    }
-
-    private Country parseCountry(String obj) {
-        Country c = new Country();
-        c.name = regexFirst(obj, "\"common\"\\s*:\\s*\"([^\"]+)\"");
-        if (c.name == null) c.name = regexFirst(obj, "\"official\"\\s*:\\s*\"([^\"]+)\"");
-        c.region = regexFirst(obj, "\"region\"\\s*:\\s*\"([^\"]+)\"");
-        c.capital = regexFirst(obj, "\"capital\"\\s*:\\s*\\[\\s*\"([^\"]+)\"");
-        c.area = parseDouble(regexFirst(obj, "\"area\"\\s*:\\s*([0-9]+\\.?[0-9]*)"));
-        c.population = parseLong(regexFirst(obj, "\"population\"\\s*:\\s*(\\d+)"));
-        String langsObj = regexFirstGroup(obj, "\"languages\"\\s*:\\s*\\{([^}]*)\\}");
-        if (langsObj != null) {
-            Matcher m = Pattern.compile("\"[^\"]+\"\\s*:\\s*\"([^\"]+)\"").matcher(langsObj);
-            List<String> langs = new ArrayList<>();
-            while (m.find()) langs.add(m.group(1));
-            if (!langs.isEmpty()) c.languages = String.join(", ", langs);
-        }
-        return c;
-    }
-
-    private double parseDouble(String s) {
-        try { return s == null ? Double.NaN : Double.parseDouble(s); } catch (Exception e) { return Double.NaN; }
-    }
-
-    private long parseLong(String s) {
-        try { return s == null ? -1 : Long.parseLong(s); } catch (Exception e) { return -1; }
-    }
-
-    private String regexFirst(String text, String pattern) {
-        Matcher m = Pattern.compile(pattern).matcher(text);
-        return m.find() ? m.group(1) : null;
-    }
-
-    private String regexFirstGroup(String text, String pattern) {
-        Matcher m = Pattern.compile(pattern, Pattern.DOTALL).matcher(text);
-        return m.find() ? m.group(1) : null;
     }
 
     private String normalize(String s) {
@@ -252,23 +210,14 @@ public class UdpServer {
         return n.replaceAll("\\p{M}", "").toLowerCase().trim();
     }
 
-    private String formatCountryFull(Country c) {
+    private String formatCountryFull(Pais c) {
         NumberFormat nf = NumberFormat.getInstance(new Locale("pt","BR"));
         nf.setMaximumFractionDigits(0);
-        return "Nome: " + c.name + "\n" +
-               "Continente: " + (c.region == null ? "—" : c.region) + "\n" +
-               "Capital: " + (c.capital == null ? "—" : c.capital) + "\n" +
-               "Área (km²): " + (Double.isNaN(c.area) ? "—" : nf.format((long)c.area)) + "\n" +
-               "População: " + (c.population < 0 ? "—" : nf.format(c.population)) + "\n" +
-               "Línguas: " + (c.languages == null ? "—" : c.languages) + "\n";
-    }
-
-    private static class Country {
-        String name;
-        String region;
-        String capital;
-        double area;
-        long population;
-        String languages;
+        return "Nome: " + c.getName().getCommon() + "\n" +
+               "Continente: " + (c.getRegion() == null ? "—" : c.getRegion()) + "\n" +
+               "Capital: " + getCapital(c) + "\n" +
+               "Área (km²): " + nf.format((long)c.getArea()) + "\n" +
+               "População: " + nf.format(c.getPopulation()) + "\n" +
+               "Línguas: " + getLanguages(c) + "\n";
     }
 }

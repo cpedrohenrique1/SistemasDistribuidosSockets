@@ -1,11 +1,13 @@
 package edu.sistemasdistribuidos.paises.models;
 
+import java.util.Arrays;
 import java.util.Map;
 
 public class Pais {
     private Name name;
     private String region;
     private String subregion;
+    private String[] capital; // Adicionado
     private Map<String, String> languages;
     private Map<String, Translation> translations;
     private double area;
@@ -37,6 +39,14 @@ public class Pais {
 
     public void setSubregion(String subregion) {
         this.subregion = subregion;
+    }
+
+    public String[] getCapital() {
+        return capital;
+    }
+
+    public void setCapital(String[] capital) {
+        this.capital = capital;
     }
 
     public Map<String, String> getLanguages() {
@@ -93,12 +103,13 @@ public class Pais {
                 "name=" + name +
                 ", region='" + region + '\'' +
                 ", subregion='" + subregion + '\'' +
+                ", capital=" + Arrays.toString(capital) +
                 ", languages=" + languages +
                 ", translations=" + translations +
                 ", area=" + area +
                 ", population=" + population +
-                ", borders=" + borders +
-                ", continents=" + continents +
+                ", borders=" + Arrays.toString(borders) +
+                ", continents=" + Arrays.toString(continents) +
                 '}';
     }
 }
