@@ -19,8 +19,8 @@ import java.util.Scanner;
  * 6. Divirta-se!
  */
 public class UdpClient {
-
-    private static final String SERVER_HOST = "";
+    // Altere para o IP do servidor se necessário
+    private static final String SERVER_HOST = "localhost";
     private static final int SERVER_PORT = 5000;
     private static final int BUFFER_SIZE = 4096;
 
@@ -28,12 +28,13 @@ public class UdpClient {
         new UdpClient().run();
     }
 
+    // Lógica principal do cliente
     public void run() {
         try (DatagramSocket socket = new DatagramSocket()) {
             socket.setSoTimeout(0);
             InetAddress serverAddr = InetAddress.getByName(SERVER_HOST);
 
-            // Listener thread
+            // Listener para mensagens do servidor
             Thread listener = new Thread(() -> {
                 byte[] buf = new byte[BUFFER_SIZE];
                 DatagramPacket pack = new DatagramPacket(buf, buf.length);
@@ -41,8 +42,15 @@ public class UdpClient {
                     try {
                         socket.receive(pack);
                         String msg = new String(pack.getData(), 0, pack.getLength(), StandardCharsets.UTF_8);
+                        if (msg.equals("SHUTDOWN") || msg.equals("shutdown")) {
+                            System.out.println("[CLIENT] O jogo acabou. Desconectando.");
+                            System.exit(0);
+                        }
                         System.out.println(msg);
                     } catch (IOException e) {
+                        if (socket.isClosed()) {
+                            break;
+                        }
                         System.err.println("[CLIENT] Erro de recebimento: " + e.getMessage());
                         break;
                     }
@@ -51,14 +59,16 @@ public class UdpClient {
             listener.setDaemon(true);
             listener.start();
 
-            // Send JOIN
+            // Envia JOIN para o servidor
             send(socket, "JOIN", serverAddr, SERVER_PORT);
             System.out.println("[CLIENT] JOIN enviado. Digite seus palpites (ou 'desisto' para sair).");
 
+            // Loop para ler palpites do usuário
             Scanner sc = new Scanner(System.in, StandardCharsets.UTF_8);
             while (true) {
                 String line = sc.nextLine().trim();
                 if (line.isEmpty()) continue;
+                // Envia o palpite ou a desistência
                 if (line.equalsIgnoreCase("desisto")) {
                     send(socket, "DESISTO", serverAddr, SERVER_PORT);
                     System.out.println("[CLIENT] Você desistiu. Saindo.");
@@ -75,6 +85,7 @@ public class UdpClient {
         }
     }
 
+    // Método auxiliar para enviar mensagens ao servidor
     private void send(DatagramSocket socket, String message, InetAddress host, int port) {
         try {
             byte[] data = message.getBytes(StandardCharsets.UTF_8);

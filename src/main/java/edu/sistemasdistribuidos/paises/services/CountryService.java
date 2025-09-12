@@ -23,9 +23,9 @@ public class CountryService {
     private final HttpClient http;
     private final Gson gson = new Gson();
     private static final String BASE_URL = "https://restcountries.com/v3.1/";
-    // ADICIONADO 'translations' AOS CAMPOS SOLICITADOS
     private static final String FIELDS = "?fields=name,region,capital,area,population,languages,translations";
 
+    // Construtor que inicializa o HttpClient com configuração SSL
     public CountryService() {
         HttpClient client;
         try {
@@ -42,6 +42,7 @@ public class CountryService {
         this.http = client;
     }
 
+    // Método principal para encontrar um país por nome ou tradução
     public Pais findCountry(String name) {
         Pais country = fetchByTranslation(name);
         if (country != null) return country;
@@ -52,29 +53,34 @@ public class CountryService {
         return fetchByName(name, false);
     }
 
+    // Busca país pelo nome, com opção de busca exata ou parcial
     private Pais fetchByName(String name, boolean fullText) {
         String endpoint = "name/" + encode(name) + FIELDS + (fullText ? "&fullText=true" : "");
         return fetchFromApi(endpoint);
     }
 
+    // Busca país pela tradução do nome
     private Pais fetchByTranslation(String name) {
-        // O endpoint de tradução agora também vai pedir os campos detalhados.
         String endpoint = "translation/" + encode(name) + FIELDS;
         return fetchFromApi(endpoint);
     }
 
+    // Método auxiliar para fazer a requisição HTTP e processar a resposta
     private Pais fetchFromApi(String endpoint) {
         try {
             HttpRequest req = HttpRequest.newBuilder()
                     .uri(URI.create(BASE_URL + endpoint))
                     .timeout(Duration.ofSeconds(10))
                     .GET().build();
+            // Envia a requisição e obtém a resposta
             HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
 
+            // Verifica se a resposta foi bem-sucedida
             if (resp.statusCode() != 200) {
                 return null;
             }
 
+            // Desserializa a resposta JSON em uma lista de países
             Type paisListType = new TypeToken<List<Pais>>(){}.getType();
             List<Pais> paises = gson.fromJson(resp.body(), paisListType);
 
@@ -85,6 +91,7 @@ public class CountryService {
         }
     }
 
+    // Método auxiliar para codificar parâmetros de URL
     private String encode(String value) {
         return URLEncoder.encode(value, StandardCharsets.UTF_8);
     }
