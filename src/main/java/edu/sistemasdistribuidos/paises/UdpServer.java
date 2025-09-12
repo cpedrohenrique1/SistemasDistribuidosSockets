@@ -88,12 +88,20 @@ public class UdpServer {
                 clients.put(clientKey, addr);
                 broadcast("[SERVER] Jogador entrou: " + clientKey);
                 sendTo(addr, "[SERVER] Bem-vindo! Comece a adivinhar.");
+            } else if (message.equalsIgnoreCase("DESISTO")) {
+                sendTo(addr, "[SERVER] Você desistiu. A resposta correta era:\n" + formatCountryFull(targetCountry));
+                clients.remove(clientKey);
+                broadcast("[SERVER] O jogador " + clientKey + " desistiu.\n");
+            } else if (message.toUpperCase().startsWith("GUESS:")) {
+                String guess = message.substring(6).trim();
+                if (!guess.isEmpty()) {
+                    processGuess(guess, clientKey);
+                }
             } else {
-                String guess = message.toUpperCase().startsWith("GUESS:") ? message.substring(6).trim() : message;
-                if (!guess.isEmpty()) processGuess(guess, clientKey);
+                System.err.println("[SERVER] Mensagem não tratada de " + clientKey + ": " + message);
             }
         } catch (Exception e) {
-            System.err.println("[SERVER] Erro: " + e.getMessage());
+            System.err.println("[SERVER] Erro ao manusear mensagem: " + e.getMessage());
         }
     }
 

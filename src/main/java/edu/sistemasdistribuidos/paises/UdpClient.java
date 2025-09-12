@@ -72,6 +72,12 @@ public class UdpClient {
                 if (line.equalsIgnoreCase("desisto")) {
                     send(socket, "DESISTO", serverAddr, SERVER_PORT);
                     System.out.println("[CLIENT] Você desistiu. Saindo.");
+                    try {
+                        // tempo para garantir que a mensagem seja reccebida antes de fechar
+                        Thread.sleep(500); 
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
                     break;
                 } else {
                     send(socket, "GUESS:" + line, serverAddr, SERVER_PORT);
