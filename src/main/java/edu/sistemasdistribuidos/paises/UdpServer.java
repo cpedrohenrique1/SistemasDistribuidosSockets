@@ -1,33 +1,23 @@
 package edu.sistemasdistribuidos.paises;
 
-import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
-import edu.sistemasdistribuidos.paises.models.Pais;
-
 import java.io.IOException;
-import java.lang.reflect.Type;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
-import java.net.URI;
-import java.net.URLEncoder;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.net.http.HttpResponse.BodyHandlers;
 import java.nio.charset.StandardCharsets;
 import java.text.NumberFormat;
-import java.time.Duration;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Scanner;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
+
+import edu.sistemasdistribuidos.paises.models.Pais;
+import edu.sistemasdistribuidos.paises.models.Translation;
+import edu.sistemasdistribuidos.paises.services.CountryService;
 
 public class UdpServer {
 
@@ -38,10 +28,7 @@ public class UdpServer {
     private DatagramSocket socket;
     private Pais targetCountry;
 
-    private final HttpClient http = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(10))
-            .build();
-    private final Gson gson = new Gson();
+    private final CountryService countryService = new CountryService(); // Instancia o serviço
 
     public static void main(String[] args) throws Exception {
         new UdpServer().start();
@@ -51,7 +38,7 @@ public class UdpServer {
         chooseTargetCountry();
 
         socket = new DatagramSocket(SERVER_PORT);
-        System.out.println("[SERVER] Listening on port " + SERVER_PORT + ". Game started with: " + targetCountry.getName().getCommon());
+        System.out.println("[SERVER] Ouvindo na porta " + SERVER_PORT + ". Jogo iniciado com: " + getPortugueseName(targetCountry));
         byte[] buf = new byte[BUFFER_SIZE];
         DatagramPacket packet = new DatagramPacket(buf, buf.length);
 
@@ -63,7 +50,7 @@ public class UdpServer {
                 String key = ((InetSocketAddress) addr).getAddress().getHostAddress() + ":" + ((InetSocketAddress) addr).getPort();
                 new Thread(() -> handleMessage(msg, key, addr)).start();
             } catch (IOException e) {
-                System.err.println("[SERVER] Error receiving packet: " + e.getMessage());
+                System.err.println("[SERVER] Erro recebimento de pacote : " + e.getMessage());
             }
         }
     }
@@ -71,16 +58,17 @@ public class UdpServer {
     private void chooseTargetCountry() {
         Scanner sc = new Scanner(System.in, StandardCharsets.UTF_8);
         while (true) {
-            System.out.print("Digite o país que deseja iniciar o jogo (ex: Brazil): ");
+            System.out.print("Digite o país que deseja iniciar o jogo (ex: Brasil): ");
             String input = sc.nextLine().trim();
             if (input.isEmpty()) continue;
-            Pais c = fetchCountryByName(input, true);
+            // Usa o serviço para buscar o país
+            Pais c = countryService.findCountry(input);
             if (c != null) {
                 targetCountry = c;
-                System.out.println("[SERVER] Country set: " + c.getName().getCommon());
+                System.out.println("[SERVER] País definido: " + getPortugueseName(c));
                 break;
             } else {
-                System.out.println("[SERVER] Country not found. Tente novamente.");
+                System.out.println("[SERVER] País não encontrado. Tente novamente.");
             }
         }
     }
@@ -89,21 +77,22 @@ public class UdpServer {
         try {
             if (message.equalsIgnoreCase("JOIN")) {
                 clients.put(clientKey, addr);
-                broadcast("[SERVER] Player joined: " + clientKey);
-                sendTo(addr, "[SERVER] Welcome! Start guessing.");
+                broadcast("[SERVER] Jogador entrou: " + clientKey);
+                sendTo(addr, "[SERVER] Bem-vindo! Comece a adivinhar.");
             } else {
                 String guess = message.toUpperCase().startsWith("GUESS:") ? message.substring(6).trim() : message;
                 if (!guess.isEmpty()) processGuess(guess, clientKey);
             }
         } catch (Exception e) {
-            System.err.println("[SERVER] Error handling message: " + e.getMessage());
+            System.err.println("[SERVER] Erro: " + e.getMessage());
         }
     }
 
     private void processGuess(String guess, String clientKey) {
-        broadcast("[SERVER] Player " + clientKey + " guessed: " + guess);
+        broadcast("[SERVER] Jogador " + clientKey + " chutou: " + guess);
 
-        Pais guessed = fetchCountryByName(guess, false);
+        // Usa o serviço para buscar o país do palpite
+        Pais guessed = countryService.findCountry(guess);
         if (guessed == null) {
             broadcast("[SERVER] País não encontrado: " + guess);
             return;
@@ -111,14 +100,14 @@ public class UdpServer {
 
         boolean nameOk = normalize(guessed.getName().getCommon()).equalsIgnoreCase(normalize(targetCountry.getName().getCommon()));
         if (nameOk) {
-            broadcast("[SERVER] 🎉 CONGRATULATIONS! Player " + clientKey + " acertou: " + guessed.getName().getCommon());
-            broadcast("[SERVER] Country info:\n" + formatCountryFull(guessed));
+            broadcast("[SERVER] 🎉 PARABÉNS! Jogador " + clientKey + " acertou: " + getPortugueseName(guessed));
+            broadcast("[SERVER] Informações do país:\n" + formatCountryFull(guessed));
             return;
         }
 
         StringBuilder report = new StringBuilder();
-        report.append("Relatório comparativo (chute por ").append(clientKey).append("):\n");
-        report.append("País: ").append(guessed.getName().getCommon()).append(" - incorreto\n");
+        report.append("Relatório comparativo (chute de ").append(clientKey).append("):\n");
+        report.append("País: ").append(getPortugueseName(guessed)).append(" - incorreto\n");
         report.append("Continente: ").append(guessed.getRegion())
               .append(guessed.getRegion().equalsIgnoreCase(targetCountry.getRegion()) ? " - correto" : " - incorreto").append("\n");
 
@@ -176,7 +165,7 @@ public class UdpServer {
             DatagramPacket dp = new DatagramPacket(data, data.length, (InetSocketAddress) addr);
             socket.send(dp);
         } catch (IOException e) {
-            System.err.println("[SERVER] Error sending to " + addr + ": " + e.getMessage());
+            System.err.println("[SERVER] Erro enviando para " + addr + ": " + e.getMessage());
         }
     }
 
@@ -185,35 +174,26 @@ public class UdpServer {
         for (SocketAddress addr : clients.values()) sendTo(addr, msg);
     }
 
-    private Pais fetchCountryByName(String name, boolean fullText) {
-        try {
-            String q = URLEncoder.encode(name, StandardCharsets.UTF_8);
-            String url = "https://restcountries.com/v3.1/name/" + q + "?fields=name,region,capital,area,population,languages" + (fullText ? "&fullText=true" : "");
-            HttpRequest req = HttpRequest.newBuilder().uri(URI.create(url)).timeout(Duration.ofSeconds(10)).GET().build();
-            HttpResponse<String> resp = http.send(req, BodyHandlers.ofString());
-
-            if (resp.statusCode() != 200) return null;
-
-            Type paisListType = new TypeToken<List<Pais>>(){}.getType();
-            List<Pais> paises = gson.fromJson(resp.body(), paisListType);
-
-            return paises.isEmpty() ? null : paises.get(0);
-        } catch (Exception e) {
-            System.err.println("[SERVER] Error fetching country data: " + e.getMessage());
-            return null;
-        }
-    }
-
     private String normalize(String s) {
         if (s == null) return "";
         String n = java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFD);
         return n.replaceAll("\\p{M}", "").toLowerCase().trim();
     }
 
+    private String getPortugueseName(Pais pais) {
+        if (pais.getTranslations() != null && pais.getTranslations().containsKey("por")) {
+            Translation ptTranslation = pais.getTranslations().get("por");
+            if (ptTranslation != null && ptTranslation.getCommon() != null) {
+                return ptTranslation.getCommon();
+            }
+        }
+        return pais.getName().getCommon(); // Fallback para o nome comum
+    }
+
     private String formatCountryFull(Pais c) {
         NumberFormat nf = NumberFormat.getInstance(new Locale("pt","BR"));
         nf.setMaximumFractionDigits(0);
-        return "Nome: " + c.getName().getCommon() + "\n" +
+        return "Nome: " + getPortugueseName(c) + "\n" +
                "Continente: " + (c.getRegion() == null ? "—" : c.getRegion()) + "\n" +
                "Capital: " + getCapital(c) + "\n" +
                "Área (km²): " + nf.format((long)c.getArea()) + "\n" +

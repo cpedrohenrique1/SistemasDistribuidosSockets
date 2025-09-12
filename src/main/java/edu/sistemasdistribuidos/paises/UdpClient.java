@@ -5,20 +5,22 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.SocketException;
-import java.net.UnknownHostException;
+import java.net.UnknownHostException;   
 import java.nio.charset.StandardCharsets;
 import java.util.Scanner;
 
-/**
- * UdpClient
- *
- * - Envia "JOIN" ao iniciar para ser registrado no servidor.
- * - Lê o console do usuário: "desisto" para sair, qualquer outra linha vira "GUESS:<texto>".
- * - Possui thread que escuta mensagens do servidor e imprime no console.
+/*
+ * Manual de como jogar:
+ * 1. Compile e execute o UdpServer.java em um terminal.
+ * 2. Em outro terminal, compile e execute o UdpClient.java.
+ * 3. No cliente, digite seus palpites para o país escolhido pelo servidor.
+ * 4. Para desistir, digite "desisto".
+ * 5. O servidor informará se o palpite está correto ou não.
+ * 6. Divirta-se!
  */
 public class UdpClient {
 
-    private static final String SERVER_HOST = "localhost";
+    private static final String SERVER_HOST = "";
     private static final int SERVER_PORT = 5000;
     private static final int BUFFER_SIZE = 4096;
 
@@ -41,7 +43,7 @@ public class UdpClient {
                         String msg = new String(pack.getData(), 0, pack.getLength(), StandardCharsets.UTF_8);
                         System.out.println(msg);
                     } catch (IOException e) {
-                        System.err.println("[CLIENT] Receive error: " + e.getMessage());
+                        System.err.println("[CLIENT] Erro de recebimento: " + e.getMessage());
                         break;
                     }
                 }
@@ -51,7 +53,7 @@ public class UdpClient {
 
             // Send JOIN
             send(socket, "JOIN", serverAddr, SERVER_PORT);
-            System.out.println("[CLIENT] Sent JOIN. Type your guesses (or 'desisto' to quit).");
+            System.out.println("[CLIENT] JOIN enviado. Digite seus palpites (ou 'desisto' para sair).");
 
             Scanner sc = new Scanner(System.in, StandardCharsets.UTF_8);
             while (true) {
@@ -59,7 +61,7 @@ public class UdpClient {
                 if (line.isEmpty()) continue;
                 if (line.equalsIgnoreCase("desisto")) {
                     send(socket, "DESISTO", serverAddr, SERVER_PORT);
-                    System.out.println("[CLIENT] You gave up. Exiting.");
+                    System.out.println("[CLIENT] Você desistiu. Saindo.");
                     break;
                 } else {
                     send(socket, "GUESS:" + line, serverAddr, SERVER_PORT);
@@ -67,9 +69,9 @@ public class UdpClient {
             }
 
         } catch (SocketException se) {
-            System.err.println("[CLIENT] Socket error: " + se.getMessage());
+            System.err.println("[CLIENT] Socket erro: " + se.getMessage());
         } catch (UnknownHostException ue) {
-            System.err.println("[CLIENT] Unknown host: " + ue.getMessage());
+            System.err.println("[CLIENT] Host desconhecido: " + ue.getMessage());
         }
     }
 
@@ -79,7 +81,7 @@ public class UdpClient {
             DatagramPacket dp = new DatagramPacket(data, data.length, host, port);
             socket.send(dp);
         } catch (IOException e) {
-            System.err.println("[CLIENT] Error sending: " + e.getMessage());
+            System.err.println("[CLIENT] Erro de envio: " + e.getMessage());
         }
     }
 }
