@@ -67,9 +67,13 @@ public class UdpServer {
         while (true) {
             System.out.print("Digite o país que deseja iniciar o jogo (ex: Brasil): ");
             String input = sc.nextLine().trim();
-            if (input.isEmpty()) continue;
+            Pais c;
+            if (input.isEmpty()) {
+                c = countryService.findRandomCountry();
+            } else {
+                c = countryService.findCountry(input);
+            }
             // Usa o serviço para buscar o país
-            Pais c = countryService.findCountry(input);
             // Se encontrado, define como país alvo e sai do loop
             if (c != null) {
                 targetCountry = c;
@@ -133,12 +137,12 @@ public class UdpServer {
         report.append("Relatório comparativo (chute de ").append(clientKey).append("):\n");
         report.append("País: ").append(getPortugueseName(guessed)).append(" - incorreto\n");
         report.append("Continente: ").append(guessed.getRegion())
-              .append(guessed.getRegion().equalsIgnoreCase(targetCountry.getRegion()) ? " - correto" : " - incorreto").append("\n");
+                .append(guessed.getRegion().equalsIgnoreCase(targetCountry.getRegion()) ? " - correto" : " - incorreto").append("\n");
 
         String guessedCapital = getCapital(guessed);
         String targetCapital = getCapital(targetCountry);
         report.append("Capital: ").append(guessedCapital)
-              .append(Objects.equals(guessedCapital, targetCapital) ? " - correto" : " - incorreto").append("\n");
+                .append(Objects.equals(guessedCapital, targetCapital) ? " - correto" : " - incorreto").append("\n");
 
         report.append("Área (km²): ").append(formatNumberRelation(guessed.getArea(), targetCountry.getArea())).append("\n");
         report.append("População: ").append(formatNumberRelation(guessed.getPopulation(), targetCountry.getPopulation())).append("\n");
@@ -151,38 +155,52 @@ public class UdpServer {
 
         broadcast(report.toString());
     }
-    
+
     // Auxiliares para formatação e envio de mensagens
     // Formata a capital do país, tratando casos nulos ou vazios
     private String getCapital(Pais pais) {
-        if (pais.getCapital() == null || pais.getCapital().length == 0) return "—";
+        if (pais.getCapital() == null || pais.getCapital().length == 0) {
+            return "—";
+        }
         return pais.getCapital()[0];
     }
+
     // Formata as línguas do país, tratando casos nulos ou vazios
     private String getLanguages(Pais pais) {
-        if (pais.getLanguages() == null || pais.getLanguages().isEmpty()) return "—";
+        if (pais.getLanguages() == null || pais.getLanguages().isEmpty()) {
+            return "—";
+        }
         return String.join(", ", pais.getLanguages().values());
     }
+
     // Formata a relação numérica entre o palpite e o país alvo
     private String formatNumberRelation(double guess, double target) {
         NumberFormat nf = NumberFormat.getInstance(new Locale("pt", "BR"));
         nf.setMaximumFractionDigits(0);
         String guessStr = nf.format((long) guess);
-        if (Math.abs(guess - target) < 1e-6) return "= " + guessStr;
+        if (Math.abs(guess - target) < 1e-6) {
+            return "= " + guessStr;
+        }
         return (guess < target ? "> " : "< ") + guessStr;
     }
+
     // Verifica se há pelo menos uma língua em comum entre os dois países
     private boolean hasCommonLanguage(String a, String b) {
-        if (a == null || b == null || a.equals("—") || b.equals("—")) return false;
+        if (a == null || b == null || a.equals("—") || b.equals("—")) {
+            return false;
+        }
         Set<String> setA = splitToSet(a);
         Set<String> setB = splitToSet(b);
         setA.retainAll(setB); // Intersecção
         return !setA.isEmpty();
     }
+
     // Divide uma string de línguas em um conjunto, para comparação
     private Set<String> splitToSet(String s) {
         Set<String> out = new HashSet<>();
-        for (String p : s.split(",")) out.add(p.trim().toLowerCase());
+        for (String p : s.split(",")) {
+            out.add(p.trim().toLowerCase());
+        }
         return out;
     }
 
@@ -201,12 +219,16 @@ public class UdpServer {
     private void broadcast(String msg) {
         System.out.println("[BROADCAST] " + msg);
         //System.out.println("[BROADCAST] " + msg.replace("\n", " | "));
-        for (SocketAddress addr : clients.values()) sendTo(addr, msg);
+        for (SocketAddress addr : clients.values()) {
+            sendTo(addr, msg);
+        }
     }
 
     // Normaliza strings para comparação (remove acentos, converte para minúsculas e trim)
     private String normalize(String s) {
-        if (s == null) return "";
+        if (s == null) {
+            return "";
+        }
         String n = java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFD);
         return n.replaceAll("\\p{M}", "").toLowerCase().trim();
     }
@@ -224,13 +246,13 @@ public class UdpServer {
 
     // Formata as informações completas do país para exibição
     private String formatCountryFull(Pais c) {
-        NumberFormat nf = NumberFormat.getInstance(new Locale("pt","BR"));
+        NumberFormat nf = NumberFormat.getInstance(new Locale("pt", "BR"));
         nf.setMaximumFractionDigits(0);
-        return "Nome: " + getPortugueseName(c) + "\n" +
-               "Continente: " + (c.getRegion() == null ? "—" : c.getRegion()) + "\n" +
-               "Capital: " + getCapital(c) + "\n" +
-               "Área (km²): " + nf.format((long)c.getArea()) + "\n" +
-               "População: " + nf.format(c.getPopulation()) + "\n" +
-               "Línguas: " + getLanguages(c) + "\n";
+        return "Nome: " + getPortugueseName(c) + "\n"
+                + "Continente: " + (c.getRegion() == null ? "—" : c.getRegion()) + "\n"
+                + "Capital: " + getCapital(c) + "\n"
+                + "Área (km²): " + nf.format((long) c.getArea()) + "\n"
+                + "População: " + nf.format(c.getPopulation()) + "\n"
+                + "Línguas: " + getLanguages(c) + "\n";
     }
 }
