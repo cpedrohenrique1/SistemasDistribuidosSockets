@@ -1,17 +1,17 @@
 package edu.sistemasdistribuidos.paises.services;
 
+import java.io.IOException;
 import java.lang.reflect.Type;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.List;
-
-import javax.net.ssl.SSLContext;
+import java.util.Random;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
@@ -23,34 +23,49 @@ public class CountryService {
     private final HttpClient http;
     private final Gson gson = new Gson();
     private static final String BASE_URL = "https://restcountries.com/v3.1/";
-    private static final String FIELDS = "?fields=name,region,capital,area,population,languages,translations";
+    private static final String FIELDS = "?fields=area,borders,continents,demonym,name,languages,population,region,subregion,translations";
 
     // Construtor que inicializa o HttpClient com configuração SSL
     public CountryService() {
         HttpClient client;
-        try {
-            client = HttpClient.newBuilder()
-                    .sslContext(SSLContext.getDefault())
-                    .connectTimeout(Duration.ofSeconds(15))
-                    .build();
-        } catch (NoSuchAlgorithmException e) {
-            System.err.println("[SERVICE_WARNING] Não foi possível obter o contexto SSL padrão. Usando o HttpClient padrão.");
-            client = HttpClient.newBuilder()
-                    .connectTimeout(Duration.ofSeconds(15))
-                    .build();
-        }
+        client = HttpClient.newBuilder().build();
         this.http = client;
     }
 
     // Método principal para encontrar um país por nome ou tradução
     public Pais findCountry(String name) {
         Pais country = fetchByTranslation(name);
-        if (country != null) return country;
+        if (country != null) {
+            return country;
+        }
 
         country = fetchByName(name, true);
-        if (country != null) return country;
+        if (country != null) {
+            return country;
+        }
 
         return fetchByName(name, false);
+    }
+
+    public Pais findRandomCountry() {
+        try {
+            HttpRequest request = HttpRequest.newBuilder().uri(new URI("https://restcountries.com/v3.1/all?fields=area,borders,continents,demonym,name,languages,population,region,subregion,translations")).build();
+
+            HttpResponse<String> response = this.http.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() == 200) {
+                Gson gson = new Gson();
+                Type paisListType = new TypeToken<List<Pais>>() {
+                }.getType();
+                List<Pais> paises = gson.fromJson(response.body(), paisListType);
+                Random random = new Random();
+                int randomIndex = random.nextInt(paises.size());
+                return paises.get(randomIndex);
+            }
+        } catch (URISyntaxException ex) {
+        } catch (IOException ex) {
+        } catch (InterruptedException ex) {
+        }
+        return null;
     }
 
     // Busca país pelo nome, com opção de busca exata ou parcial
@@ -61,7 +76,7 @@ public class CountryService {
 
     // Busca país pela tradução do nome
     private Pais fetchByTranslation(String name) {
-        String endpoint = "translation/" + encode(name) + FIELDS;
+        String endpoint = "translation/" + encode(name);
         return fetchFromApi(endpoint);
     }
 
@@ -81,7 +96,8 @@ public class CountryService {
             }
 
             // Desserializa a resposta JSON em uma lista de países
-            Type paisListType = new TypeToken<List<Pais>>(){}.getType();
+            Type paisListType = new TypeToken<List<Pais>>() {
+            }.getType();
             List<Pais> paises = gson.fromJson(resp.body(), paisListType);
 
             return paises.isEmpty() ? null : paises.get(0);
@@ -93,6 +109,6 @@ public class CountryService {
 
     // Método auxiliar para codificar parâmetros de URL
     private String encode(String value) {
-        return URLEncoder.encode(value, StandardCharsets.UTF_8);
+        return URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20");
     }
 }
